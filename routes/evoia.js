@@ -1,5 +1,5 @@
 const express = require('express');
-const db = require('../db');
+const { helpers } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const aiProvider = require('../lib/aiProvider');
 const { localAnswer, findBestLessonMatch } = require('../lib/evoiaFallback');
@@ -20,18 +20,15 @@ router.post('/chat', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Mensagem vazia.' });
   }
 
-  db.prepare(`INSERT INTO evoia_conversations (user_id, role, message) VALUES (?, 'user', ?)`)
-    .run(req.user.userId, message);
+  await helpers.addEvoiaMessage(req.user.userId, 'user', message);
 
   let reply, lessonRef = null, source = 'local';
 
   if (aiProvider.isConfigured()) {
     try {
-      // dá contexto (grounding) ao modelo real com o conteúdo da aula mais relevante encontrada localmente
       const match = findBestLessonMatch(message);
       let contextBlock = '';
       if (match) {
-        const lessonId = `${'ia-zero-ao-profissional'}__m${match.moduleIdx + 1}__l${match.lessonIdx + 1}`;
         contextBlock = `\n\nContexto de uma aula potencialmente relevante da trilha ("${match.moduleTitle}" > "${match.lessonTitle}"): use-o se ajudar a responder, mas não é obrigatório.`;
         lessonRef = { moduleIdx: match.moduleIdx, lessonIdx: match.lessonIdx, title: match.lessonTitle, ready: match.ready };
       }
@@ -50,19 +47,15 @@ router.post('/chat', requireAuth, async (req, res) => {
     lessonRef = fallback.lessonRef;
   }
 
-  db.prepare(`INSERT INTO evoia_conversations (user_id, role, message) VALUES (?, 'assistant', ?)`)
-    .run(req.user.userId, reply);
+  await helpers.addEvoiaMessage(req.user.userId, 'assistant', reply);
 
   res.json({ reply, lessonRef, source });
 });
 
-// GET /api/evoia/history — histórico de conversa do usuário logado (só o dele, nunca de outro estudante)
+// GET /api/evoia/history — histórico de conversa do usuário logado
 router.get('/history', requireAuth, (req, res) => {
-  const rows = db.prepare(`
-    SELECT role, message, created_at FROM evoia_conversations
-    WHERE user_id = ? ORDER BY created_at ASC LIMIT 200
-  `).all(req.user.userId);
-  res.json({ history: rows });
+  const history = helpers.getEvoiaHistory(req.user.userId);
+  res.json({ history });
 });
 
 module.exports = router;

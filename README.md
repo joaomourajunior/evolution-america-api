@@ -28,7 +28,7 @@ cp .env.example .env
 npm start
 ```
 
-O servidor sobe em `http://localhost:3001`. Na primeira execução, o banco SQLite é
+O servidor sobe em `http://localhost:3001`. Na primeira execução, o banco (um arquivo `evolution-america.json`, sem nenhuma dependência nativa/compilação) é
 criado automaticamente e semeado com:
 
 - 2 escolas de demonstração: **Colégio Atlas** (`colegio-atlas`) e **Instituto Nova
@@ -47,10 +47,10 @@ criado automaticamente e semeado com:
    - `JWT_SECRET` (gere um valor novo e aleatório — nunca reuse o de exemplo)
    - `AI_PROVIDER` e a chave correspondente (ex: `GEMINI_API_KEY`), se quiser o EVO IA
      com IA real desde já. Sem isso, o EVO IA continua funcionando no modo local.
-5. **Importante sobre o banco de dados:** o SQLite grava um arquivo em disco. No Railway,
+5. **Importante sobre o banco de dados:** os dados ficam num arquivo `evolution-america.json` em disco. No Railway,
    o sistema de arquivos padrão **não é persistente** entre deploys — para não perder
    dado a cada atualização, adicione um **Volume** (Railway → seu serviço → Settings →
-   Volumes) apontando para a pasta onde o `.db` fica, e aponte `DB_PATH` nas variáveis
+   Volumes) apontando para a pasta onde esse arquivo fica, e aponte `DB_PATH` nas variáveis
    de ambiente para dentro desse volume (ex: `/data/evolution-america.db`).
 6. Após o deploy, o Railway te dá uma URL pública (ex: `https://evolution-america-api-production.up.railway.app`).
    Use essa URL para conectar o frontend (ver próxima seção).

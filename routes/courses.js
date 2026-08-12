@@ -1,30 +1,24 @@
 const express = require('express');
-const db = require('../db');
+const { helpers } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/courses — catálogo completo (mesmo conteúdo para todas as escolas)
 router.get('/', requireAuth, (req, res) => {
-  const courses = db.prepare(`SELECT * FROM courses`).all();
+  const courses = helpers.listCourses();
   const result = courses.map(course => {
-    const modules = db.prepare(`SELECT * FROM modules WHERE course_id = ? ORDER BY idx`).all(course.id);
+    const modules = helpers.listModulesByCourse(course.id);
     const modulesWithLessons = modules.map(m => {
-      const lessons = db.prepare(`
-        SELECT id, idx, title, duration, ready FROM lessons WHERE module_id = ? ORDER BY idx
-      `).all(m.id);
+      const lessons = helpers.listLessonsByModule(m.id)
+        .map(l => ({ id: l.id, idx: l.idx, title: l.title, duration: l.duration, ready: l.ready }));
 
-      // progresso do usuário logado nessa turma de aulas (isolado por user_id, que já é isolado por escola)
-      const completedIds = new Set(
-        db.prepare(`
-          SELECT lesson_id FROM progress
-          WHERE user_id = ? AND lesson_id IN (${lessons.map(() => '?').join(',') || "''"})
-        `).all(req.user.userId, ...lessons.map(l => l.id)).map(r => r.lesson_id)
-      );
+      const lessonIds = lessons.map(l => l.id);
+      const completedIds = helpers.getCompletedLessonIds(req.user.userId, lessonIds);
 
       return {
         ...m,
-        lessons: lessons.map(l => ({ ...l, ready: !!l.ready, completed: completedIds.has(l.id) })),
+        lessons: lessons.map(l => ({ ...l, completed: completedIds.has(l.id) })),
       };
     });
     return { ...course, modules: modulesWithLessons };
@@ -35,7 +29,7 @@ router.get('/', requireAuth, (req, res) => {
 // GET /api/courses/:courseId/lessons/:lessonId — conteúdo completo de uma aula
 router.get('/:courseId/lessons/:lessonId', requireAuth, (req, res) => {
   const { lessonId } = req.params;
-  const lesson = db.prepare(`SELECT * FROM lessons WHERE id = ?`).get(lessonId);
+  const lesson = helpers.getLessonById(lessonId);
   if (!lesson) return res.status(404).json({ error: 'Aula não encontrada.' });
   if (!lesson.ready) return res.status(200).json({ lesson: { ...lesson, ready: false } });
   res.json({ lesson: { ...lesson, ready: true } });
