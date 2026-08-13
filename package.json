@@ -1,24 +1,25 @@
 {
-  "name": "evolution-america-api",
+  "name": "evo-backend",
   "version": "1.0.0",
-  "description": "API do HUB Tecnologico - plataforma Evolution America",
-  "main": "server.js",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": ["evolution-america", "hub-tecnologico", "educacao", "ia"],
+  "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "lowdb": "^7.0.1"
+    "lowdb": "^7.0.1",
+    "nanoid": "^3.3.18"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.2"
   }
 }

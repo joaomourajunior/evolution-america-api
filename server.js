@@ -1,50 +1,47 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { init } = require('./db');
+const { syncCourseCatalog, seedIfEmpty, getDb } = require('./db');
+const authRoutes = require('./routes/auth');
+const { router: ownerRoutes } = require('./routes/owner');
+const suggestionsRoutes = require('./routes/suggestions');
+const turmasRoutes = require('./routes/turmas');
+const relatoriosRoutes = require('./routes/relatorios');
+const evoiaRoutes = require('./routes/evoia');
 
-async function main() {
-  await init(); // garante o banco carregado (e semeado, se vazio) antes de subir as rotas
-
-  const authRoutes = require('./routes/auth');
-  const schoolRoutes = require('./routes/schools');
-  const courseRoutes = require('./routes/courses');
-  const progressRoutes = require('./routes/progress');
-  const evoiaRoutes = require('./routes/evoia');
-  const classRoutes = require('./routes/classes');
-  const reportRoutes = require('./routes/reports');
-
+function createApp() {
   const app = express();
-  const PORT = process.env.PORT || 3001;
-
   app.use(cors());
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json());
 
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'evolution-america-api', time: new Date().toISOString() });
+  app.get('/api/health', async (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/api/course', async (req, res) => {
+    const db = await getDb();
+    res.json({ course: db.data.course });
   });
 
   app.use('/api/auth', authRoutes);
-  app.use('/api/schools', schoolRoutes);
-  app.use('/api/courses', courseRoutes);
-  app.use('/api/progress', progressRoutes);
+  app.use('/api/owner', ownerRoutes);
+  app.use('/api/suggestions', suggestionsRoutes);
+  app.use('/api/escolas', turmasRoutes);
+  app.use('/api/escolas', relatoriosRoutes);
   app.use('/api/evoia', evoiaRoutes);
-  app.use('/api/classes', classRoutes);
-  app.use('/api/reports', reportRoutes);
 
-  // handler de erro genérico — evita que o servidor derrube a resposta sem explicação
-  app.use((err, req, res, next) => {
-    console.error('[erro não tratado]', err);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
-  });
-
-  app.listen(PORT, () => {
-    console.log(`\n🚀 Evolution América API rodando em http://localhost:${PORT}`);
-    console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
-  });
+  return app;
 }
 
-main().catch(err => {
-  console.error('Falha ao iniciar o servidor:', err);
-  process.exit(1);
-});
+async function boot() {
+  await seedIfEmpty();
+  await syncCourseCatalog(); // roda toda vez que o servidor sobe, sem apagar dados existentes
+  const app = createApp();
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => console.log(`Evolution América API rodando na porta ${PORT}`));
+}
+
+if (require.main === module) {
+  boot();
+}
+
+module.exports = { createApp, boot };
