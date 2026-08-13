@@ -1,10 +1,12 @@
 // db.js — banco de dados 100% JavaScript puro (lowdb), sem dependências nativas.
 // Lição aprendida: better-sqlite3 causava Segmentation fault no Railway.
+// Nota técnica: lowdb 7.x é ESM-only (só funciona com "import", não com "require").
+// Por isso carregamos ele com import() dinâmico dentro de uma função async,
+// mantendo o resto do projeto 100% CommonJS (require), sem precisar mudar
+// nenhum outro arquivo do projeto para "type": "module".
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
-const { Low } = require('lowdb');
-const { JSONFile } = require('lowdb/node');
 const { COURSE } = require('./course-data');
 
 const DB_FILE = path.join(__dirname, 'evolution-america.json');
@@ -22,6 +24,8 @@ let dbInstance = null;
 
 async function getDb() {
   if (dbInstance) return dbInstance;
+  const { Low } = await import('lowdb');
+  const { JSONFile } = await import('lowdb/node');
   const adapter = new JSONFile(DB_FILE);
   const db = new Low(adapter, defaultData);
   await db.read();
