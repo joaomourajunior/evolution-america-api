@@ -1,6 +1,6 @@
 {
   "name": "evolution-america-api",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "API do HUB Tecnologico - plataforma Evolution America",
   "main": "server.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "dev": "node --watch server.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": ["evolution-america", "hub-tecnologico", "educacao", "ia"],
   "author": "",

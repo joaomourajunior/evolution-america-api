@@ -14,6 +14,8 @@ const defaultData = {
   lessons: [],       // { id, module_id, idx, title, duration, ready, content_visual, content_audio, content_kin }
   progress: [],       // { id, user_id, lesson_id, completed_at }
   evoiaConversations: [], // { id, user_id, role, message, created_at }
+  classes: [],        // { id, school_id, name, course_id, created_at }
+  enrollments: [],     // { id, class_id, user_id, enrolled_at }
 };
 
 let db; // instância inicializada de forma assíncrona, ver init() abaixo
@@ -176,6 +178,70 @@ const helpers = {
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
       .slice(0, 200)
       .map(({ role, message, created_at }) => ({ role, message, created_at })),
+
+  // ======================= Turmas (classes) =======================
+  listClassesBySchool: (schoolId) =>
+    db.data.classes.filter(c => c.school_id === schoolId).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
+  getClassById: (classId) => db.data.classes.find(c => c.id === classId),
+  createClass: async ({ school_id, name, course_id }) => {
+    const cls = { id: nextId(), school_id, name, course_id: course_id || null, created_at: nowIso() };
+    db.data.classes.push(cls);
+    await db.write();
+    return cls;
+  },
+  deleteClass: async (classId) => {
+    db.data.classes = db.data.classes.filter(c => c.id !== classId);
+    db.data.enrollments = db.data.enrollments.filter(e => e.class_id !== classId);
+    await db.write();
+  },
+
+  // ======================= Matrículas (enrollments) =======================
+  listStudentsInClass: (classId) => {
+    const enrollments = db.data.enrollments.filter(e => e.class_id === classId);
+    return enrollments.map(e => {
+      const user = db.data.users.find(u => u.id === e.user_id);
+      return user ? { id: user.id, name: user.name, username: user.username, email: user.email, enrolled_at: e.enrolled_at } : null;
+    }).filter(Boolean);
+  },
+  enrollStudent: async (classId, userId) => {
+    const exists = db.data.enrollments.find(e => e.class_id === classId && e.user_id === userId);
+    if (exists) return exists;
+    const enrollment = { id: nextId(), class_id: classId, user_id: userId, enrolled_at: nowIso() };
+    db.data.enrollments.push(enrollment);
+    await db.write();
+    return enrollment;
+  },
+  unenrollStudent: async (classId, userId) => {
+    db.data.enrollments = db.data.enrollments.filter(e => !(e.class_id === classId && e.user_id === userId));
+    await db.write();
+  },
+  getClassIdsForStudent: (userId) =>
+    db.data.enrollments.filter(e => e.user_id === userId).map(e => e.class_id),
+
+  // ======================= Relatórios (reports) =======================
+  getSchoolReport: (schoolId) => {
+    const classes = db.data.classes.filter(c => c.school_id === schoolId);
+    const totalLessons = db.data.lessons.filter(l => l.ready).length;
+
+    const classReports = classes.map(cls => {
+      const students = helpers.listStudentsInClass(cls.id);
+      const studentReports = students.map(student => {
+        const completed = db.data.progress.filter(p => p.user_id === student.id).length;
+        const pct = totalLessons ? Math.round((completed / totalLessons) * 100) : 0;
+        return { id: student.id, name: student.name, username: student.username, completed, totalLessons, pct };
+      });
+      const avgPct = studentReports.length
+        ? Math.round(studentReports.reduce((a, s) => a + s.pct, 0) / studentReports.length)
+        : 0;
+      return { classId: cls.id, className: cls.name, studentCount: studentReports.length, avgPct, students: studentReports };
+    });
+
+    // engajamento por canal: quantos registros de progresso existem (proxy simples de engajamento geral)
+    const schoolUserIds = new Set(db.data.users.filter(u => u.school_id === schoolId).map(u => u.id));
+    const totalCompletions = db.data.progress.filter(p => schoolUserIds.has(p.user_id)).length;
+
+    return { classReports, totalLessons, totalCompletions, totalClasses: classes.length };
+  },
 };
 
 module.exports = { init, helpers, bcrypt };

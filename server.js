@@ -11,6 +11,8 @@ async function main() {
   const courseRoutes = require('./routes/courses');
   const progressRoutes = require('./routes/progress');
   const evoiaRoutes = require('./routes/evoia');
+  const classRoutes = require('./routes/classes');
+  const reportRoutes = require('./routes/reports');
 
   const app = express();
   const PORT = process.env.PORT || 3001;
@@ -27,6 +29,8 @@ async function main() {
   app.use('/api/courses', courseRoutes);
   app.use('/api/progress', progressRoutes);
   app.use('/api/evoia', evoiaRoutes);
+  app.use('/api/classes', classRoutes);
+  app.use('/api/reports', reportRoutes);
 
   // handler de erro genérico — evita que o servidor derrube a resposta sem explicação
   app.use((err, req, res, next) => {
