@@ -9,12 +9,15 @@ const bcrypt = require('bcryptjs');
 const DB_FILE = path.join(__dirname, 'evolution-america.json');
 
 const defaultData = {
-  schools: [],        // { id, slug, name, city, state, users:[{id,username,passwordHash,name,role}], classes:[{id,name,students:[{id,name,username,passwordHash}]}] }
+  schools: [],        // { id, slug, name, city, state, users:[...], classes:[{id,name,students:[...]}] }
   owner: null,         // { username, passwordHash }
   suggestions: [],     // { id, schoolId, schoolName, author, message, createdAt }
   ownerVisitLog: [],   // { id, quando, acao, escolaId, escolaNome, detalhe }
   counters: { classId: 0, studentId: 0 },
 };
+// Cada estudante (dentro de school.classes[].students[]):
+// { id, name, username, passwordHash, enrolledModule: "m1", progress: {"m1-l1": true, ...},
+//   assessments: { m1: { passed: true, score: 85, attemptedAt } } }
 
 let dbInstance = null;
 
@@ -60,9 +63,14 @@ async function seedIfEmpty() {
         name: 'Colégio Atlas',
         city: 'Sorocaba',
         state: 'SP',
+        active: true,
+        logoDataUrl: null,
+        email: '',
+        phone: '',
+        cpfCnpj: '',
         users: [
-          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234') },
-          { id: 2, username: 'admin', name: 'Administrador', role: 'admin', passwordHash: hash('demo1234') },
+          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true } },
+          { id: 2, username: 'admin', name: 'Administrador', role: 'admin', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true } },
         ],
         classes: [],
       },
@@ -72,8 +80,13 @@ async function seedIfEmpty() {
         name: 'Instituto Nova Era',
         city: 'Curitiba',
         state: 'PR',
+        active: true,
+        logoDataUrl: null,
+        email: '',
+        phone: '',
+        cpfCnpj: '',
         users: [
-          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234') },
+          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true } },
         ],
         classes: [],
       }
@@ -82,6 +95,31 @@ async function seedIfEmpty() {
   }
 
   if (changed) await db.write();
+
+  // Migração leve: escolas/usuários criados antes desta versão ganham os
+  // campos novos com valores padrão seguros, sem perder nenhum dado existente.
+  let migrated = false;
+  db.data.schools.forEach((s) => {
+    if (s.active === undefined) { s.active = true; migrated = true; }
+    if (s.logoDataUrl === undefined) { s.logoDataUrl = null; migrated = true; }
+    if (s.email === undefined) { s.email = ''; migrated = true; }
+    if (s.phone === undefined) { s.phone = ''; migrated = true; }
+    if (s.cpfCnpj === undefined) { s.cpfCnpj = ''; migrated = true; }
+    s.users.forEach((u) => {
+      if (u.email === undefined) { u.email = ''; migrated = true; }
+      if (u.phone === undefined) { u.phone = ''; migrated = true; }
+      if (u.cpf === undefined) { u.cpf = ''; migrated = true; }
+      if (u.permissions === undefined) { u.permissions = { turmas: true, relatorios: true, evoia: true }; migrated = true; }
+    });
+    s.classes.forEach((c) => {
+      c.students.forEach((st) => {
+        if (st.enrolledModule === undefined) { st.enrolledModule = 'm1'; migrated = true; }
+        if (st.progress === undefined) { st.progress = {}; migrated = true; }
+        if (st.assessments === undefined) { st.assessments = {}; migrated = true; }
+      });
+    });
+  });
+  if (migrated) await db.write();
 }
 
 module.exports = { getDb, seedIfEmpty, hash, nextId };

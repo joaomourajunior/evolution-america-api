@@ -1,8 +1,9 @@
 const express = require('express');
-const { requireSchoolAuth } = require('../lib/auth-middleware');
+const { requireSchoolAuth, requirePermission } = require('../lib/auth-middleware');
 
 const router = express.Router();
 router.use(requireSchoolAuth);
+router.use(requirePermission('evoia'));
 
 const FAQ = [
   { words: ['inteligencia', 'artificial', 'ia'], answer: 'Inteligência Artificial é a área da tecnologia que ensina máquinas a reconhecer padrões e tomar decisões a partir de dados, em vez de seguir só regras fixas escritas por uma pessoa.' },
