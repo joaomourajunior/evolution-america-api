@@ -2,22 +2,18 @@
 // Lição aprendida: better-sqlite3 causava Segmentation fault no Railway.
 // Nota técnica: lowdb 7.x é ESM-only (só funciona com "import", não com "require").
 // Por isso carregamos ele com import() dinâmico dentro de uma função async,
-// mantendo o resto do projeto 100% CommonJS (require), sem precisar mudar
-// nenhum outro arquivo do projeto para "type": "module".
+// mantendo o resto do projeto 100% CommonJS (require).
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { nanoid } = require('nanoid');
-const { COURSE } = require('./course-data');
 
 const DB_FILE = path.join(__dirname, 'evolution-america.json');
 
 const defaultData = {
-  course: null,
-  escolas: [],       // { id, slug, nome, usuarios: [...], turmas: [...] }
-  estudantes: [],     // { id, escolaId, turmaId, username, passwordHash, nome, progresso: {}, recommended_level }
-  owner: null,        // { username, passwordHash }
-  suggestions: [],    // { id, escolaId, escolaNome, autor, mensagem, criadoEm, status }
-  ownerVisitLog: [],  // { id, quando, acao, escolaId, escolaNome, detalhe }
+  schools: [],        // { id, slug, name, city, state, users:[{id,username,passwordHash,name,role}], classes:[{id,name,students:[{id,name,username,passwordHash}]}] }
+  owner: null,         // { username, passwordHash }
+  suggestions: [],     // { id, schoolId, schoolName, author, message, createdAt }
+  ownerVisitLog: [],   // { id, quando, acao, escolaId, escolaNome, detalhe }
+  counters: { classId: 0, studentId: 0 },
 };
 
 let dbInstance = null;
@@ -30,6 +26,7 @@ async function getDb() {
   const db = new Low(adapter, defaultData);
   await db.read();
   db.data ||= structuredClone(defaultData);
+  db.data.counters ||= { classId: 0, studentId: 0 };
   dbInstance = db;
   return db;
 }
@@ -38,13 +35,9 @@ function hash(pw) {
   return bcrypt.hashSync(pw, 10);
 }
 
-// Roda toda vez que o servidor sobe. Atualiza título/nível/conteúdo do curso
-// a partir de course-data.js, mas NUNCA apaga escola, usuário, turma ou progresso.
-async function syncCourseCatalog() {
-  const db = await getDb();
-  db.data.course = COURSE; // conteúdo pedagógico é sempre a fonte do código
-  await db.write();
-  return db.data.course;
+function nextId(db, key) {
+  db.data.counters[key] = (db.data.counters[key] || 0) + 1;
+  return db.data.counters[key];
 }
 
 async function seedIfEmpty() {
@@ -59,26 +52,30 @@ async function seedIfEmpty() {
     changed = true;
   }
 
-  if (db.data.escolas.length === 0) {
-    db.data.escolas.push(
+  if (db.data.schools.length === 0) {
+    db.data.schools.push(
       {
-        id: nanoid(),
+        id: 1,
         slug: 'colegio-atlas',
-        nome: 'Colégio Atlas',
-        usuarios: [
-          { id: nanoid(), username: 'professor.demo', role: 'professor', passwordHash: hash('demo1234') },
-          { id: nanoid(), username: 'admin', role: 'admin', passwordHash: hash('demo1234') },
+        name: 'Colégio Atlas',
+        city: 'Sorocaba',
+        state: 'SP',
+        users: [
+          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234') },
+          { id: 2, username: 'admin', name: 'Administrador', role: 'admin', passwordHash: hash('demo1234') },
         ],
-        turmas: [],
+        classes: [],
       },
       {
-        id: nanoid(),
+        id: 2,
         slug: 'instituto-nova-era',
-        nome: 'Instituto Nova Era',
-        usuarios: [
-          { id: nanoid(), username: 'professor.demo', role: 'professor', passwordHash: hash('demo1234') },
+        name: 'Instituto Nova Era',
+        city: 'Curitiba',
+        state: 'PR',
+        users: [
+          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234') },
         ],
-        turmas: [],
+        classes: [],
       }
     );
     changed = true;
@@ -87,4 +84,4 @@ async function seedIfEmpty() {
   if (changed) await db.write();
 }
 
-module.exports = { getDb, syncCourseCatalog, seedIfEmpty, hash };
+module.exports = { getDb, seedIfEmpty, hash, nextId };

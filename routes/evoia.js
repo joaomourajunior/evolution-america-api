@@ -1,39 +1,33 @@
 const express = require('express');
-const { getDb } = require('../db');
+const { requireSchoolAuth } = require('../lib/auth-middleware');
 
 const router = express.Router();
+router.use(requireSchoolAuth);
 
-function buscaLocal(course, pergunta) {
-  const termo = (pergunta || '').toLowerCase();
-  for (const nivel of course.niveis) {
-    for (const a of nivel.aulas) {
-      const blob = `${a.titulo} ${a.canais.visual} ${a.canais.auditivo} ${a.canais.cinestesico}`.toLowerCase();
-      if (blob.includes(termo) && termo.length > 2) {
-        return `Encontrei isso na aula "${a.titulo}" (nível ${nivel.nome}): ${a.canais.visual}`;
-      }
-    }
-  }
-  return 'Ainda não encontrei esse conteúdo na trilha. Tenta reformular a pergunta ou me diz em qual nível você está estudando.';
-}
+const FAQ = [
+  { words: ['inteligencia', 'artificial', 'ia'], answer: 'Inteligência Artificial é a área da tecnologia que ensina máquinas a reconhecer padrões e tomar decisões a partir de dados, em vez de seguir só regras fixas escritas por uma pessoa.' },
+  { words: ['prompt', 'pedir', 'perguntar'], answer: 'Um bom prompt é claro, dá contexto e diz exatamente o formato de resposta que você espera. Quanto mais específico, melhor a resposta da IA.' },
+  { words: ['agente', 'agentes'], answer: 'Agentes de IA são sistemas que não só respondem, mas também executam tarefas por conta própria, usando ferramentas e tomando decisões em etapas.' },
+  { words: ['certificado', 'certificacao'], answer: 'O certificado é emitido ao concluir todos os módulos da trilha. Essa funcionalidade está em desenvolvimento nas próximas camadas da plataforma.' },
+  { words: ['apostila', 'pdf'], answer: 'Você pode gerar a apostila em PDF da trilha completa direto na página do curso, clicando em "Gerar apostila (PDF)".' },
+];
 
-// POST /api/evoia/chat { pergunta }
+// POST /api/evoia/chat { message }
 router.post('/chat', async (req, res) => {
-  const { pergunta } = req.body || {};
-  if (!pergunta) return res.status(400).json({ error: 'pergunta é obrigatória' });
+  const message = (req.body && req.body.message || '').toLowerCase();
+  const words = message.replace(/[^\wà-ú\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3);
 
-  const db = await getDb();
-  const provider = process.env.AI_PROVIDER;
-
-  if (!provider) {
-    return res.json({ resposta: buscaLocal(db.data.course, pergunta), modo: 'local' });
-  }
-
-  // Modo com provedor externo (Gemini/Anthropic/OpenAI) — depende de chave de API
-  // configurada no Railway. Mantido como stub aqui pois foge do escopo do teste local.
-  return res.json({
-    resposta: buscaLocal(db.data.course, pergunta),
-    modo: `externo:${provider} (stub — configure a chamada real quando a chave estiver ativa)`,
+  let best = null, bestScore = 0;
+  FAQ.forEach((f) => {
+    const score = words.filter((w) => f.words.some((fw) => w.includes(fw) || fw.includes(w))).length;
+    if (score > bestScore) { bestScore = score; best = f; }
   });
+
+  const reply = best
+    ? best.answer
+    : 'Ainda não tenho uma resposta direta pra isso pelo backend. Tente perguntar sobre prompts, agentes de IA, certificação ou a apostila em PDF.';
+
+  res.json({ reply, source: 'local' });
 });
 
 module.exports = router;

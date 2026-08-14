@@ -1,53 +1,52 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
-const { helpers } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { getDb, hash, nextId } = require('../db');
+const { requireSchoolAuth } = require('../lib/auth-middleware');
 
 const router = express.Router();
+router.use(requireSchoolAuth);
 
-function slugify(text) {
-  return text.toString().toLowerCase().trim()
+function slugify(name) {
+  return name
+    .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
 }
 
-// POST /api/schools — cadastra uma nova escola + usuário admin dela
-router.post('/', async (req, res) => {
-  const { schoolName, city, state, adminName, adminUsername, adminEmail, adminPassword } = req.body || {};
-  if (!schoolName || !adminName || !adminUsername || !adminPassword) {
-    return res.status(400).json({ error: 'Nome da escola, nome do admin, usuário e senha são obrigatórios.' });
-  }
-  if (adminPassword.length < 6) {
-    return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
-  }
-
-  const slug = slugify(schoolName) + '-' + Math.floor(1000 + Math.random() * 9000);
-  const school = await helpers.createSchool({ name: schoolName, slug, city, state });
-
-  const passwordHash = bcrypt.hashSync(adminPassword, 10);
-  await helpers.createUser({
-    school_id: school.id, name: adminName, username: adminUsername,
-    email: adminEmail || null, password_hash: passwordHash, role: 'admin',
-  });
-
-  res.status(201).json({
-    school: { id: school.id, name: schoolName, slug, city, state },
-    message: 'Escola cadastrada com sucesso. O admin já pode fazer login.',
-  });
-});
-
-// GET /api/schools — lista todas as escolas (uso administrativo da plataforma)
-router.get('/', (req, res) => {
-  const schools = helpers.listAllSchoolsWithUserCount();
+// GET /api/schools — todas as escolas cadastradas na plataforma
+router.get('/', async (req, res) => {
+  const db = req.db;
+  const schools = db.data.schools.map((s) => ({
+    name: s.name, city: s.city, state: s.state, total_users: s.users.length,
+  }));
   res.json({ schools });
 });
 
-// GET /api/schools/me — dados da própria escola do usuário logado (isolado por tenant)
-router.get('/me', requireAuth, (req, res) => {
-  const school = helpers.getSchoolById(req.user.schoolId);
-  const users = helpers.listUsersBySchool(req.user.schoolId)
-    .map(u => ({ id: u.id, name: u.name, username: u.username, role: u.role, active: u.active }));
-  res.json({ school: { id: school.id, name: school.name, slug: school.slug, city: school.city, state: school.state }, users });
+// POST /api/schools { schoolName, city, state, adminName, adminUsername, adminPassword }
+router.post('/', async (req, res) => {
+  const db = req.db;
+  const { schoolName, city, state, adminName, adminUsername, adminPassword } = req.body || {};
+  if (!schoolName || !adminName || !adminUsername || !adminPassword) {
+    return res.status(400).json({ error: 'Preencha nome da escola, nome do admin, usuário e senha' });
+  }
+  let slug = slugify(schoolName);
+  let suffix = 1;
+  while (db.data.schools.some((s) => s.slug === slug)) {
+    slug = slugify(schoolName) + '-' + (++suffix);
+  }
+
+  const school = {
+    id: (db.data.schools.reduce((max, s) => Math.max(max, s.id), 0) || 0) + 1,
+    slug,
+    name: schoolName,
+    city: city || '',
+    state: state || '',
+    users: [{ id: 1, username: adminUsername, name: adminName, role: 'admin', passwordHash: hash(adminPassword) }],
+    classes: [],
+  };
+  db.data.schools.push(school);
+  await db.write();
+  res.status(201).json({ school: { slug: school.slug, name: school.name, city: school.city, state: school.state } });
 });
 
 module.exports = router;
