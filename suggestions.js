@@ -1,30 +1,28 @@
 const express = require('express');
-const { requireSchoolAuth, requirePermission } = require('../lib/auth-middleware');
+const { requireSchoolAuth } = require('./auth-middleware');
 
 const router = express.Router();
 router.use(requireSchoolAuth);
-router.use(requirePermission('tickets'));
 
-// GET /api/tickets — todos os tickets da própria escola (mais recentes primeiro)
-router.get('/', async (req, res) => {
-  const tickets = [...(req.school.tickets || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json({ tickets });
-});
+// POST /api/suggestions { message }
+// A escola NUNCA edita conteúdo de curso diretamente — só sugere,
+// e a sugestão aparece pro dono junto com o nome da escola/pessoa que enviou.
+router.post('/', async (req, res) => {
+  const { message } = req.body || {};
+  if (!message || !message.trim()) return res.status(400).json({ error: 'message é obrigatório' });
 
-// PUT /api/tickets/:id/reply { reply }
-router.put('/:id/reply', async (req, res) => {
   const db = req.db;
-  const ticket = (req.school.tickets || []).find((t) => t.id === Number(req.params.id));
-  if (!ticket) return res.status(404).json({ error: 'Ticket não encontrado' });
-
-  const { reply } = req.body || {};
-  if (!reply || !reply.trim()) return res.status(400).json({ error: 'Escreva uma resposta' });
-
-  ticket.professorReply = reply.trim();
-  ticket.professorRepliedAt = new Date().toISOString();
-  ticket.status = 'respondido_pelo_professor';
+  const suggestion = {
+    id: (db.data.suggestions.reduce((max, s) => Math.max(max, s.id), 0) || 0) + 1,
+    schoolId: req.school.id,
+    schoolName: req.school.name,
+    author: req.user.name || req.user.username,
+    message: message.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  db.data.suggestions.push(suggestion);
   await db.write();
-  res.json({ ticket });
+  res.status(201).json({ suggestion });
 });
 
 module.exports = router;

@@ -1,46 +1,51 @@
-const { getDb } = require('../db');
-const token = require('../lib/token');
+const express = require('express');
+const { nextId } = require('./db');
+const { requireSchoolAuth, requirePermission } = require('./auth-middleware');
+const { requireStudentAuth } = require('./student-auth-middleware');
+const { answerFromFAQ } = require('./evoia-knowledge');
 
-// Middleware: exige um token válido de usuário de escola (Authorization: Bearer <token>)
-// e anexa req.school / req.user com os dados carregados do banco.
-async function requireSchoolAuth(req, res, next) {
-  const auth = req.header('authorization') || '';
-  const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  const payload = token.verify(t);
-  if (!payload) return res.status(401).json({ error: 'Não autenticado' });
+const router = express.Router();
 
-  const db = await getDb();
-  const school = db.data.schools.find((s) => s.id === payload.schoolId);
-  const user = school && school.users.find((u) => u.id === payload.userId);
-  if (!school || !user) return res.status(401).json({ error: 'Sessão inválida' });
+// ===== Lado do ESTUDANTE =====
 
-  req.db = db;
-  req.school = school;
-  req.user = user;
-  next();
-}
-
-// Middleware adicional: exige que o usuário logado seja "admin" (diretora)
-// da própria escola. Use depois de requireSchoolAuth.
-function requireSchoolAdmin(req, res, next) {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Só a direção da escola pode fazer isso' });
+// POST /api/students/tickets { subject, message }
+// Abre um ticket de dúvida. Duas respostas chegam juntas, na hora:
+// 1) uma confirmação automática ("vou avaliar sua solicitação...")
+// 2) a resposta do EVO IA, já tentando ajudar de imediato.
+router.post('/', requireStudentAuth, async (req, res) => {
+  const { subject, message } = req.body || {};
+  if (!subject || !subject.trim() || !message || !message.trim()) {
+    return res.status(400).json({ error: 'Preencha o assunto e a mensagem' });
   }
-  next();
-}
-
-// Middleware factory: exige uma permissão específica (turmas/relatorios/evoia).
-// A direção (role "admin") sempre passa, independente do que estiver salvo —
-// só vale de fato pra restringir outros papéis, aos poucos, pela diretora.
-function requirePermission(key) {
-  return function (req, res, next) {
-    if (req.user.role === 'admin') return next();
-    const perms = req.user.permissions || {};
-    if (!perms[key]) {
-      return res.status(403).json({ error: 'Seu acesso a esta área foi restringido pela direção da escola' });
-    }
-    next();
+  const db = req.db;
+  const aiReply = answerFromFAQ(message);
+  const ticket = {
+    id: nextId(db, 'ticketId'),
+    studentId: req.student.id,
+    studentName: req.student.name,
+    className: req.klass ? req.klass.name : '',
+    classId: req.klass ? req.klass.id : null,
+    subject: subject.trim(),
+    message: message.trim(),
+    status: 'respondido_pela_ia', // aguardando_professor | respondido_pela_ia | respondido_pelo_professor
+    professorAckMessage: 'Vou avaliar sua solicitação e retorno em breve. Enquanto isso, aqui vai uma resposta inicial da EVO IA:',
+    aiReply,
+    professorReply: null,
+    professorRepliedAt: null,
+    createdAt: new Date().toISOString(),
   };
-}
+  req.school.tickets = req.school.tickets || [];
+  req.school.tickets.push(ticket);
+  await db.write();
+  res.status(201).json({ ticket });
+});
 
-module.exports = { requireSchoolAuth, requireSchoolAdmin, requirePermission };
+// GET /api/students/tickets — tickets do próprio estudante
+router.get('/mine', requireStudentAuth, async (req, res) => {
+  const tickets = (req.school.tickets || [])
+    .filter((t) => t.studentId === req.student.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  res.json({ tickets });
+});
+
+module.exports = router;

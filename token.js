@@ -1,30 +1,34 @@
-const { getDb } = require('../db');
-const token = require('./token');
+// lib/token.js — token assinado simples (HMAC-SHA256), 100% biblioteca nativa do Node.
+// Formato: base64url(payloadJSON) + "." + base64url(hmac)
+const crypto = require('crypto');
 
-// Middleware: exige um token válido de ESTUDANTE (separado do token de escola/dono).
-// Anexa req.school / req.klass / req.student com os dados carregados do banco.
-async function requireStudentAuth(req, res, next) {
-  const auth = req.header('authorization') || '';
-  const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  const payload = token.verify(t);
-  if (!payload || !payload.student) return res.status(401).json({ error: 'Não autenticado' });
+const SECRET = process.env.TOKEN_SECRET || 'evolution-america-dev-secret-troque-em-producao';
 
-  const db = await getDb();
-  const school = db.data.schools.find((s) => s.id === payload.schoolId);
-  if (!school) return res.status(401).json({ error: 'Sessão inválida' });
-  let klass = null, student = null;
-  for (const c of school.classes) {
-    const s = c.students.find((st) => st.id === payload.studentId);
-    if (s) { klass = c; student = s; break; }
-  }
-  if (!student) return res.status(401).json({ error: 'Sessão inválida' });
-  if (school.active === false) return res.status(403).json({ error: 'O acesso desta escola está suspenso.' });
-
-  req.db = db;
-  req.school = school;
-  req.klass = klass;
-  req.student = student;
-  next();
+function b64url(buf) {
+  return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  return Buffer.from(str, 'base64').toString('utf8');
 }
 
-module.exports = { requireStudentAuth };
+function sign(payload, ttlMs = 1000 * 60 * 60 * 24 * 7) {
+  const body = { ...payload, exp: Date.now() + ttlMs };
+  const payloadB64 = b64url(JSON.stringify(body));
+  const sig = crypto.createHmac('sha256', SECRET).update(payloadB64).digest();
+  return payloadB64 + '.' + b64url(sig);
+}
+
+function verify(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [payloadB64, sigB64] = token.split('.');
+  const expectedSig = b64url(crypto.createHmac('sha256', SECRET).update(payloadB64).digest());
+  if (expectedSig !== sigB64) return null;
+  let payload;
+  try { payload = JSON.parse(b64urlDecode(payloadB64)); } catch (e) { return null; }
+  if (!payload.exp || payload.exp < Date.now()) return null;
+  return payload;
+}
+
+module.exports = { sign, verify };

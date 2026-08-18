@@ -1,25 +1,22 @@
 const express = require('express');
-const { requireSchoolAuth } = require('../lib/auth-middleware');
+const { requireSchoolAuth } = require('./auth-middleware');
 
 const router = express.Router();
 router.use(requireSchoolAuth);
 
-// POST /api/progress/:lessonId — marca aula como concluída pro usuário logado
-router.post('/:lessonId', async (req, res) => {
-  const db = req.db;
-  req.user.progress = req.user.progress || {};
-  req.user.progress[req.params.lessonId] = true;
-  await db.write();
-  res.json({ ok: true });
+// GET /api/courses
+// Retorna vazio de propósito: o frontend já tem um catálogo local rico e completo
+// (6 módulos / 24 aulas) e só substitui pelos dados da API se "courses" vier
+// preenchido. Isso evita duplicar conteúdo pedagógico aqui, mantendo a trilha
+// que já está publicada como fonte da verdade por enquanto.
+router.get('/', async (req, res) => {
+  res.json({ courses: [] });
 });
 
-// DELETE /api/progress/:lessonId — desmarca
-router.delete('/:lessonId', async (req, res) => {
-  const db = req.db;
-  req.user.progress = req.user.progress || {};
-  delete req.user.progress[req.params.lessonId];
-  await db.write();
-  res.json({ ok: true });
+// GET /api/courses/:courseId/lessons/:lessonId — reservado para quando o
+// conteúdo pedagógico completo for migrado pra cá.
+router.get('/:courseId/lessons/:lessonId', async (req, res) => {
+  res.status(404).json({ error: 'Conteúdo desta aula ainda não está disponível pela API' });
 });
 
 module.exports = router;
