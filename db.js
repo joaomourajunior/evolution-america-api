@@ -3,17 +3,27 @@
 // Nota técnica: lowdb 7.x é ESM-only (só funciona com "import", não com "require").
 // Por isso carregamos ele com import() dinâmico dentro de uma função async,
 // mantendo o resto do projeto 100% CommonJS (require).
+//
+// ⚠️ PERSISTÊNCIA DE DADOS — LEIA ANTES DE PUBLICAR EM PRODUÇÃO:
+// Por padrão, o Railway apaga o sistema de arquivos do servidor a cada novo
+// deploy (é um "container" novo, do zero). Se DATA_DIR não for configurado,
+// o banco vive dentro da própria pasta do app e é perdido a cada atualização.
+// Para persistir de verdade: no Railway, crie um "Volume" no serviço (Settings
+// → Volumes → New Volume, mount path por exemplo "/data") e defina a variável
+// de ambiente DATA_DIR=/data. A partir daí, os dados sobrevivem a qualquer
+// novo deploy.
 const path = require('path');
 const bcrypt = require('bcryptjs');
 
-const DB_FILE = path.join(__dirname, 'evolution-america.json');
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DB_FILE = path.join(DATA_DIR, 'evolution-america.json');
 
 const defaultData = {
   schools: [],        // { id, slug, name, city, state, users:[...], classes:[{id,name,students:[...]}] }
   owner: null,         // { username, passwordHash }
   suggestions: [],     // { id, schoolId, schoolName, author, message, createdAt }
   ownerVisitLog: [],   // { id, quando, acao, escolaId, escolaNome, detalhe }
-  counters: { classId: 0, studentId: 0 },
+  counters: { classId: 0, studentId: 0, ticketId: 0 },
 };
 // Cada estudante (dentro de school.classes[].students[]):
 // { id, name, username, passwordHash, enrolledModule: "m1", progress: {"m1-l1": true, ...},
@@ -29,7 +39,7 @@ async function getDb() {
   const db = new Low(adapter, defaultData);
   await db.read();
   db.data ||= structuredClone(defaultData);
-  db.data.counters ||= { classId: 0, studentId: 0 };
+  db.data.counters ||= { classId: 0, studentId: 0, ticketId: 0 };
   dbInstance = db;
   return db;
 }
@@ -69,10 +79,11 @@ async function seedIfEmpty() {
         phone: '',
         cpfCnpj: '',
         users: [
-          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true } },
-          { id: 2, username: 'admin', name: 'Administrador', role: 'admin', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true } },
+          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true, tickets: true } },
+          { id: 2, username: 'admin', name: 'Administrador', role: 'admin', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true, tickets: true } },
         ],
         classes: [],
+        tickets: [],
       },
       {
         id: 2,
@@ -86,9 +97,10 @@ async function seedIfEmpty() {
         phone: '',
         cpfCnpj: '',
         users: [
-          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true } },
+          { id: 1, username: 'professor.demo', name: 'Professor Demo', role: 'professor', passwordHash: hash('demo1234'), email: '', phone: '', cpf: '', permissions: { turmas: true, relatorios: true, evoia: true, tickets: true } },
         ],
         classes: [],
+        tickets: [],
       }
     );
     changed = true;
@@ -105,11 +117,13 @@ async function seedIfEmpty() {
     if (s.email === undefined) { s.email = ''; migrated = true; }
     if (s.phone === undefined) { s.phone = ''; migrated = true; }
     if (s.cpfCnpj === undefined) { s.cpfCnpj = ''; migrated = true; }
+    if (s.tickets === undefined) { s.tickets = []; migrated = true; }
     s.users.forEach((u) => {
       if (u.email === undefined) { u.email = ''; migrated = true; }
       if (u.phone === undefined) { u.phone = ''; migrated = true; }
       if (u.cpf === undefined) { u.cpf = ''; migrated = true; }
-      if (u.permissions === undefined) { u.permissions = { turmas: true, relatorios: true, evoia: true }; migrated = true; }
+      if (u.permissions === undefined) { u.permissions = { turmas: true, relatorios: true, evoia: true, tickets: true }; migrated = true; }
+      if (u.permissions && u.permissions.tickets === undefined) { u.permissions.tickets = true; migrated = true; }
     });
     s.classes.forEach((c) => {
       c.students.forEach((st) => {

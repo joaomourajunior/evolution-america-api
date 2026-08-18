@@ -12,6 +12,8 @@ const evoiaRoutes = require('./routes/evoia');
 const { router: ownerRoutes } = require('./routes/owner');
 const suggestionsRoutes = require('./routes/suggestions');
 const studentsRoutes = require('./routes/students');
+const studentTicketsRoutes = require('./routes/student-tickets');
+const ticketsRoutes = require('./routes/tickets');
 
 function createApp() {
   const app = express();
@@ -31,7 +33,9 @@ function createApp() {
   app.use('/api/evoia', evoiaRoutes);
   app.use('/api/owner', ownerRoutes);
   app.use('/api/suggestions', suggestionsRoutes);
+  app.use('/api/students/tickets', studentTicketsRoutes);
   app.use('/api/students', studentsRoutes);
+  app.use('/api/tickets', ticketsRoutes);
 
   return app;
 }
