@@ -1,37 +1,72 @@
-// course-catalog.js — espelha a estrutura de módulos/aulas do frontend (6 níveis,
-// 24 aulas) para o backend poder validar avanço sequencial e aplicar avaliações.
-// Isto é a fonte de verdade para: quais aulas existem em cada módulo, e a ordem
-// oficial dos módulos (Explorer → Master).
+const express = require('express');
+const { requireSchoolAuth, requirePermission } = require('../lib/auth-middleware');
+const { MODULES } = require('../course-catalog');
 
-const MODULES = [
-  { id: 'm1', level: 'explorer', levelLabel: 'IA Explorer', accessKey: 'EXPLORER-KEY', ageRange: '7-10 anos', lessonCount: 4 },
-  { id: 'm2', level: 'builder', levelLabel: 'IA Builder', accessKey: 'BUILDER-KEY', ageRange: '11-14 anos', lessonCount: 4 },
-  { id: 'm3', level: 'creator', levelLabel: 'IA Creator', accessKey: 'CREATOR-KEY', ageRange: '15-16 anos', lessonCount: 4 },
-  { id: 'm4', level: 'professional', levelLabel: 'IA Professional', accessKey: 'PROFESSIONAL-KEY', ageRange: '17+ anos', lessonCount: 4 },
-  { id: 'm5', level: 'specialist', levelLabel: 'IA Specialist', accessKey: 'SPECIALIST-KEY', ageRange: 'Especialização', lessonCount: 4 },
-  { id: 'm6', level: 'master', levelLabel: 'IA Master & Trainer', accessKey: 'MASTER-KEY', ageRange: 'Formação de formadores', lessonCount: 4 },
-];
+const router = express.Router();
+router.use(requireSchoolAuth);
+router.use(requirePermission('relatorios'));
 
-function moduleIndex(moduleId) {
-  return MODULES.findIndex((m) => m.id === moduleId);
-}
+const TOTAL_LESSONS = MODULES.reduce((a, m) => a + m.lessonCount, 0); // 24 (6 módulos x 4 aulas)
 
-function lessonKeys(moduleId) {
+function moduleLabel(moduleId) {
   const m = MODULES.find((mm) => mm.id === moduleId);
-  if (!m) return [];
-  return Array.from({ length: m.lessonCount }, (_, i) => `${moduleId}-l${i + 1}`);
+  return m ? m.levelLabel : moduleId;
 }
 
-function allLessonKeysUpTo(moduleId) {
-  const idx = moduleIndex(moduleId);
-  if (idx === -1) return [];
-  return MODULES.slice(0, idx + 1).flatMap((m) => lessonKeys(m.id));
-}
+// GET /api/reports/school
+router.get('/school', async (req, res) => {
+  const classes = req.school.classes;
+  let totalCompletions = 0;
 
-function nextModuleId(moduleId) {
-  const idx = moduleIndex(moduleId);
-  if (idx === -1 || idx === MODULES.length - 1) return null;
-  return MODULES[idx + 1].id;
-}
+  const classReports = classes.map((c) => {
+    const students = c.students.map((s) => {
+      const completed = Object.values(s.progress || {}).filter(Boolean).length;
+      totalCompletions += completed;
+      return {
+        id: s.id,
+        name: s.name,
+        enrolledModule: s.enrolledModule || 'm1',
+        enrolledModuleLabel: moduleLabel(s.enrolledModule || 'm1'),
+        completed,
+        totalLessons: TOTAL_LESSONS,
+        pct: TOTAL_LESSONS ? Math.round((completed / TOTAL_LESSONS) * 100) : 0,
+      };
+    });
+    const avgPct = students.length
+      ? Math.round(students.reduce((a, s) => a + s.pct, 0) / students.length)
+      : 0;
+    return { classId: c.id, className: c.name, studentCount: c.students.length, avgPct, students };
+  });
 
-module.exports = { MODULES, moduleIndex, lessonKeys, allLessonKeysUpTo, nextModuleId };
+  res.json({
+    totalClasses: classes.length,
+    totalLessons: TOTAL_LESSONS,
+    totalCompletions,
+    classReports,
+  });
+});
+
+// GET /api/reports/search?q=termo — busca estudante por nome, restrita à própria escola
+router.get('/search', async (req, res) => {
+  const q = (req.query.q || '').toLowerCase().trim();
+  const results = [];
+  req.school.classes.forEach((klass) => {
+    klass.students.forEach((s) => {
+      if (!q || s.name.toLowerCase().includes(q) || s.username.toLowerCase().includes(q)) {
+        const completed = Object.values(s.progress || {}).filter(Boolean).length;
+        results.push({
+          id: s.id, name: s.name, username: s.username,
+          className: klass.name, classId: klass.id,
+          enrolledModule: s.enrolledModule || 'm1',
+          enrolledModuleLabel: moduleLabel(s.enrolledModule || 'm1'),
+          completed, totalLessons: TOTAL_LESSONS,
+          pct: TOTAL_LESSONS ? Math.round((completed / TOTAL_LESSONS) * 100) : 0,
+          assessments: s.assessments || {},
+        });
+      }
+    });
+  });
+  res.json({ results });
+});
+
+module.exports = router;
