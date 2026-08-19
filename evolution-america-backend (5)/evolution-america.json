@@ -1,0 +1,97 @@
+{
+  "schools": [
+    {
+      "id": 1,
+      "slug": "colegio-atlas",
+      "name": "Colégio Atlas",
+      "city": "Sorocaba",
+      "state": "SP",
+      "active": true,
+      "logoDataUrl": null,
+      "email": "",
+      "phone": "",
+      "cpfCnpj": "",
+      "users": [
+        {
+          "id": 1,
+          "username": "professor.demo",
+          "name": "Professor Demo",
+          "role": "professor",
+          "passwordHash": "$2b$10$mTvB2wJeDgw8qmzOAvbPbe3HTkscW3aJ51MNzj58wMZ3.SbDTR3hS",
+          "email": "",
+          "phone": "",
+          "cpf": "",
+          "permissions": {
+            "turmas": true,
+            "relatorios": true,
+            "evoia": true,
+            "tickets": true
+          }
+        },
+        {
+          "id": 2,
+          "username": "admin",
+          "name": "Administrador",
+          "role": "admin",
+          "passwordHash": "$2b$10$9Xpw0TmLIc/YAxWYrpJY3u1z6jnI2uUUutf2VL2gfs5I84VZo5aG6",
+          "email": "",
+          "phone": "",
+          "cpf": "",
+          "permissions": {
+            "turmas": true,
+            "relatorios": true,
+            "evoia": true,
+            "tickets": true
+          }
+        }
+      ],
+      "classes": [],
+      "tickets": [],
+      "courseCover": null
+    },
+    {
+      "id": 2,
+      "slug": "instituto-nova-era",
+      "name": "Instituto Nova Era",
+      "city": "Curitiba",
+      "state": "PR",
+      "active": true,
+      "logoDataUrl": null,
+      "email": "",
+      "phone": "",
+      "cpfCnpj": "",
+      "users": [
+        {
+          "id": 1,
+          "username": "professor.demo",
+          "name": "Professor Demo",
+          "role": "professor",
+          "passwordHash": "$2b$10$JEHzUjZHJhnIh4azSVaPI.5XI9vrF/G0Dx09EbW4rB4T5v0K0jFiu",
+          "email": "",
+          "phone": "",
+          "cpf": "",
+          "permissions": {
+            "turmas": true,
+            "relatorios": true,
+            "evoia": true,
+            "tickets": true
+          }
+        }
+      ],
+      "classes": [],
+      "tickets": [],
+      "courseCover": null
+    }
+  ],
+  "owner": {
+    "username": "owner.master",
+    "passwordHash": "$2b$10$T9pCfrObPTDDppuTH/f8fuu8mTN1ghJ6zWbQl2WPUy6YJ8d7Lwu0e"
+  },
+  "suggestions": [],
+  "ownerVisitLog": [],
+  "counters": {
+    "classId": 0,
+    "studentId": 0,
+    "ticketId": 0
+  }
+}
